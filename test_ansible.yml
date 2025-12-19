@@ -1,0 +1,116 @@
+---
+- name: Basic permission checks for the Ansible executing user
+  hosts: all
+  gather_facts: true
+  become: false
+
+  vars:
+    test_dir: "/tmp/ansible_perm_test"
+    test_file: "{{ test_dir }}/hello.txt"
+    archive_path: "/tmp/ansible_perm_test.tar.gz"
+    symlink_path: "{{ test_dir }}/hello_link.txt"
+
+  tasks:
+    - name: Show who is running Ansible on the remote host
+      ansible.builtin.debug:
+        msg:
+          - "ansible_user_id (fact): {{ ansible_user_id | default('unknown') }}"
+          - "ansible_user_gid (fact): {{ ansible_user_gid | default('unknown') }}"
+          - "ansible_user_dir (fact): {{ ansible_user_dir | default('unknown') }}"
+
+    - name: Create test directory in /tmp
+      ansible.builtin.file:
+        path: "{{ test_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create a test file and write content
+      ansible.builtin.copy:
+        dest: "{{ test_file }}"
+        content: |
+          Ansible permission test
+          Host: {{ inventory_hostname }}
+          Date: {{ ansible_date_time.iso8601 }}
+          User: {{ ansible_user_id | default('unknown') }}
+        mode: "0644"
+
+    - name: Append an extra line (checks write permissions on existing file)
+      ansible.builtin.lineinfile:
+        path: "{{ test_file }}"
+        line: "Appended line: OK"
+        create: false
+
+    - name: Read back the file (checks read permissions)
+      ansible.builtin.slurp:
+        src: "{{ test_file }}"
+      register: slurped
+
+    - name: Print file content
+      ansible.builtin.debug:
+        msg: "{{ slurped.content | b64decode }}"
+
+    - name: Change permissions to something more restrictive (checks chmod ability)
+      ansible.builtin.file:
+        path: "{{ test_file }}"
+        mode: "0600"
+
+    - name: Create a symlink (checks symlink permissions in directory)
+      ansible.builtin.file:
+        src: "{{ test_file }}"
+        dest: "{{ symlink_path }}"
+        state: link
+
+    - name: Create a tar.gz archive of the test directory (compression check)
+      ansible.builtin.archive:
+        path: "{{ test_dir }}"
+        dest: "{{ archive_path }}"
+        format: gz
+
+    - name: Check archive exists and show size
+      ansible.builtin.stat:
+        path: "{{ archive_path }}"
+      register: arc_stat
+
+    - name: Display archive info
+      ansible.builtin.debug:
+        msg:
+          - "Archive created: {{ arc_stat.stat.exists }}"
+          - "Archive size (bytes): {{ arc_stat.stat.size | default('n/a') }}"
+          - "Archive path: {{ archive_path }}"
+
+    - name: List created files (uses remote shell, useful sanity check)
+      ansible.builtin.command: "ls -la {{ test_dir }}"
+      register: ls_out
+      changed_when: false
+
+    - name: Show directory listing
+      ansible.builtin.debug:
+        var: ls_out.stdout_lines
+
+    # Optional: prove whether privilege escalation works (without failing the whole run)
+    - name: OPTIONAL - try writing into /root using become (should fail without become rights)
+      ansible.builtin.copy:
+        dest: "/root/ansible_perm_test.txt"
+        content: "If you can read this, become worked.\n"
+        mode: "0600"
+      become: true
+      register: root_write
+      ignore_errors: true
+
+    - name: Report become test result
+      ansible.builtin.debug:
+        msg:
+          - "Become test rc: {{ root_write.rc | default('n/a') }}"
+          - "Become test failed?: {{ root_write.failed | default(false) }}"
+          - "Become test msg: {{ root_write.msg | default('no msg') }}"
+
+    # Cleanup (optional): comment these if you want to inspect artifacts
+    - name: Cleanup - remove test directory
+      ansible.builtin.file:
+        path: "{{ test_dir }}"
+        state: absent
+
+    - name: Cleanup - remove archive
+      ansible.builtin.file:
+        path: "{{ archive_path }}"
+        state: absent
