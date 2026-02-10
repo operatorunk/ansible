@@ -1,0 +1,103 @@
+---
+- name: Upgrade Azure Arc (azcmagent) offline on RHEL 9 from a local RPM
+  hosts: rhel9
+  become: true
+  gather_facts: true
+
+  vars:
+    # Path on the Ansible control node (where you run ansible-playbook)
+    azcmagent_rpm_src: "./files/azcmagent-1.60.03293-809.x86_64.rpm"
+
+    # Where to place the RPM on the target host
+    azcmagent_rpm_dest: "/tmp/azcmagent-1.60.03293-809.x86_64.rpm"
+
+    # Hardening path (typical install location)
+    azcmagent_install_dir: "/opt/azcmagent"
+
+  pre_tasks:
+    - name: Ensure this play is running on x86_64 targets
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.architecture == "x86_64"
+        fail_msg: "Target architecture is {{ ansible_facts.architecture }}; this playbook expects x86_64."
+
+    - name: Ensure this is RHEL 9 (or compatible) family
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "RedHat"
+          - ansible_facts.distribution_major_version | int == 9
+        fail_msg: "Target is {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}; this playbook expects RHEL 9."
+
+  tasks:
+    - name: Copy azcmagent RPM to target
+      ansible.builtin.copy:
+        src: "{{ azcmagent_rpm_src }}"
+        dest: "{{ azcmagent_rpm_dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Stop Azure Arc services (if present)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - azcmagent
+        - himds
+      ignore_errors: true
+
+    - name: Install/upgrade azcmagent from local RPM (offline)
+      ansible.builtin.dnf:
+        name: "{{ azcmagent_rpm_dest }}"
+        state: present
+        disable_gpg_check: false
+      register: dnf_install
+
+    - name: Start and enable Azure Arc services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - himds
+        - azcmagent
+      ignore_errors: true
+
+    - name: Harden permissions on azcmagent install directory (best-effort)
+      ansible.builtin.file:
+        path: "{{ azcmagent_install_dir }}"
+        owner: root
+        group: root
+        mode: "0755"
+        recurse: true
+      ignore_errors: true
+
+    - name: Remove group/other write bits under install dir (best-effort)
+      ansible.builtin.command: "chmod -R go-w {{ azcmagent_install_dir }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Check for unexpected SUID/SGID under install dir (best-effort)
+      ansible.builtin.command: "find {{ azcmagent_install_dir }} -perm /6000 -print"
+      register: suid_scan
+      changed_when: false
+      failed_when: false
+
+    - name: Show SUID/SGID findings (should be empty)
+      ansible.builtin.debug:
+        msg:
+          - "SUID/SGID findings under {{ azcmagent_install_dir }}:"
+          - "{{ suid_scan.stdout_lines | default([]) }}"
+
+    - name: Get azcmagent version (new)
+      ansible.builtin.command: "azcmagent version"
+      register: azcm_version
+      changed_when: false
+
+    - name: Display new azcmagent version
+      ansible.builtin.debug:
+        msg:
+          - "azcmagent version output:"
+          - "{{ azcm_version.stdout }}"
+          - "dnf changed: {{ dnf_install.changed }}"
+
