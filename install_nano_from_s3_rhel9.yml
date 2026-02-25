@@ -1,0 +1,53 @@
+---
+- name: Install nano RPM from S3 on RHEL9
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    s3_bucket: "mi-bucket-devops"
+    s3_key: "artifacts/test/nano-6.2-7.el9.x86_64.rpm"
+    download_dir: "/tmp/test_rpm"
+    pkg_filename: "{{ s3_key | basename }}"
+    pkg_path: "{{ download_dir }}/{{ pkg_filename }}"
+
+  pre_tasks:
+    - name: Ensure this runs only on RHEL 9
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "RedHat"
+          - ansible_facts.distribution_major_version == "9"
+        fail_msg: "Este playbook es SOLO para RHEL 9.x"
+
+  tasks:
+    - name: Create download directory
+      ansible.builtin.file:
+        path: "{{ download_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Install AWS CLI if missing
+      ansible.builtin.dnf:
+        name: awscli
+        state: present
+
+    - name: Download nano RPM from S3
+      ansible.builtin.command: >
+        aws s3 cp s3://{{ s3_bucket }}/{{ s3_key }} {{ pkg_path }}
+      args:
+        creates: "{{ pkg_path }}"
+
+    - name: Install nano RPM locally
+      ansible.builtin.dnf:
+        name: "{{ pkg_path }}"
+        state: present
+        disable_gpg_check: true
+
+    - name: Verify nano installation
+      ansible.builtin.command: nano --version
+      register: nano_version
+      changed_when: false
+
+    - name: Show nano version
+      ansible.builtin.debug:
+        msg: "Installed nano version: {{ nano_version.stdout }}"
