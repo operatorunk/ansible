@@ -5,7 +5,6 @@
   gather_facts: true
 
   vars:
-    # S3 location where you uploaded the RPM
     s3_bucket: "mi-bucket-python"
     s3_key: "artifacts/azcmagent/azcmagent-1.61.03319-859.x86_64.rpm"
 
@@ -25,14 +24,14 @@
         that:
           - ansible_facts.os_family == "RedHat"
           - ansible_facts.distribution_major_version == "9"
-        fail_msg: "Este playbook es SOLO para RHEL 9.x"
+        fail_msg: "Playbook only for RHEL 9.x"
 
     - name: Assert RPM filename looks correct
       ansible.builtin.assert:
         that:
           - pkg_filename.endswith(".rpm")
           - pkg_filename is search(rpm_name)
-        fail_msg: "El objeto en S3 debe ser un RPM de {{ rpm_name }} (actual: {{ pkg_filename }})"
+        fail_msg: "The S3 object must be an RPM  {{ rpm_name }} (actual: {{ pkg_filename }})"
 
   tasks:
     - name: Ensure download directory exists
@@ -41,31 +40,31 @@
         state: directory
         mode: "0755"
 
-    # --- AWS CLI check first, install only if missing ---
+
     - name: Check if AWS CLI exists
       ansible.builtin.command: aws --version
       register: awscli_check
       changed_when: false
       failed_when: false
 
-    - name: Install AWS CLI (only if missing)
+    - name: Install AWS CLI if missing
       ansible.builtin.dnf:
         name: awscli
         state: present
       when: awscli_check.rc != 0
 
-    - name: Re-check AWS CLI after install (or confirm existing)
+    - name: Re-check AWS CLI after install 
       ansible.builtin.command: aws --version
       register: awscli_version
       changed_when: false
 
-    - name: Download RPM from S3 to server (idempotent)
+    - name: Download RPM from S3 to server
       ansible.builtin.command: >
         aws s3 cp s3://{{ s3_bucket }}/{{ s3_key }} {{ pkg_path }}
       args:
         creates: "{{ pkg_path }}"
 
-    - name: Check current installed version (if any)
+    - name: Check current installed version of package
       ansible.builtin.command: rpm -q --qf '%{NAME} %{VERSION}-%{RELEASE}\n' {{ rpm_name }}
       register: rpm_query
       changed_when: false
@@ -104,7 +103,7 @@
       register: rpm_upgrade
       changed_when: true
 
-    - name: Start and enable himdsd after upgrade (if exists)
+    - name: Start and enable himdsd after upgrade
       ansible.builtin.service:
         name: "{{ himdsd_service }}"
         state: started
