@@ -1,0 +1,124 @@
+---
+- name: Upgrade azcmagent from S3 on RHEL9 (stop himdsd -> rpm -Uvh -> start himdsd)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # S3 location where you uploaded the RPM
+    s3_bucket: "mi-bucket-python"
+    s3_key: "artifacts/azcmagent/azcmagent-1.61.03319-859.x86_64.rpm"
+
+    download_dir: "/tmp/azcmagent"
+    pkg_filename: "{{ s3_key | basename }}"
+    pkg_path: "{{ download_dir }}/{{ pkg_filename }}"
+
+    # Service to stop/start around the upgrade
+    himdsd_service: "himdsd"
+
+    # Package name (as reported by rpm)
+    rpm_name: "azcmagent"
+
+  pre_tasks:
+    - name: Assert this playbook runs only on RHEL 9
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "RedHat"
+          - ansible_facts.distribution_major_version == "9"
+        fail_msg: "Este playbook es SOLO para RHEL 9.x"
+
+    - name: Assert RPM filename looks correct
+      ansible.builtin.assert:
+        that:
+          - pkg_filename.endswith(".rpm")
+          - pkg_filename is search(rpm_name)
+        fail_msg: "El objeto en S3 debe ser un RPM de {{ rpm_name }} (actual: {{ pkg_filename }})"
+
+  tasks:
+    - name: Ensure download directory exists
+      ansible.builtin.file:
+        path: "{{ download_dir }}"
+        state: directory
+        mode: "0755"
+
+    # --- AWS CLI check first, install only if missing ---
+    - name: Check if AWS CLI exists
+      ansible.builtin.command: aws --version
+      register: awscli_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install AWS CLI (only if missing)
+      ansible.builtin.dnf:
+        name: awscli
+        state: present
+      when: awscli_check.rc != 0
+
+    - name: Re-check AWS CLI after install (or confirm existing)
+      ansible.builtin.command: aws --version
+      register: awscli_version
+      changed_when: false
+
+    - name: Download RPM from S3 to server (idempotent)
+      ansible.builtin.command: >
+        aws s3 cp s3://{{ s3_bucket }}/{{ s3_key }} {{ pkg_path }}
+      args:
+        creates: "{{ pkg_path }}"
+
+    - name: Check current installed version (if any)
+      ansible.builtin.command: rpm -q --qf '%{NAME} %{VERSION}-%{RELEASE}\n' {{ rpm_name }}
+      register: rpm_query
+      changed_when: false
+      failed_when: false
+
+    - name: Read target version-release from RPM file
+      ansible.builtin.command: rpm -qp --qf '%{NAME} %{VERSION}-%{RELEASE}\n' {{ pkg_path }}
+      register: rpm_target
+      changed_when: false
+
+    - name: Decide if upgrade is needed
+      ansible.builtin.set_fact:
+        azcm_current: "{{ (rpm_query.stdout | trim) if (rpm_query.rc == 0) else '' }}"
+        azcm_target: "{{ rpm_target.stdout | trim }}"
+        azcm_needs_upgrade: "{{ (rpm_query.rc != 0) or ((rpm_query.stdout | trim) != (rpm_target.stdout | trim)) }}"
+
+    - name: Show current vs target
+      ansible.builtin.debug:
+        msg:
+          - "AWS CLI: {{ awscli_version.stdout | default(awscli_version.stderr) }}"
+          - "Current: {{ azcm_current if azcm_current else 'NOT INSTALLED' }}"
+          - "Target:  {{ azcm_target }}"
+          - "Upgrade needed: {{ azcm_needs_upgrade }}"
+
+    - name: Stop himdsd before upgrade (if exists)
+      ansible.builtin.service:
+        name: "{{ himdsd_service }}"
+        state: stopped
+      when: azcm_needs_upgrade
+      failed_when: false
+
+    - name: Upgrade/install azcmagent with rpm -Uvh
+      ansible.builtin.command: >
+        rpm -Uvh {{ pkg_path }}
+      when: azcm_needs_upgrade
+      register: rpm_upgrade
+      changed_when: true
+
+    - name: Start and enable himdsd after upgrade (if exists)
+      ansible.builtin.service:
+        name: "{{ himdsd_service }}"
+        state: started
+        enabled: true
+      when: azcm_needs_upgrade
+      failed_when: false
+
+    - name: Verify installed version
+      ansible.builtin.command: rpm -q --qf '%{NAME} %{VERSION}-%{RELEASE}\n' {{ rpm_name }}
+      register: rpm_verify
+      changed_when: false
+
+    - name: Final status
+      ansible.builtin.debug:
+        msg:
+          - "Installed: {{ rpm_verify.stdout | trim }}"
+          - "RPM file: {{ pkg_path }}"
