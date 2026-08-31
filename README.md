@@ -11,3 +11,6 @@ https://packages.microsoft.com/yumrepos/microsoft-rhel9.0-prod/Packages/a/azcmag
 https://download.rockylinux.org/pub/rocky/9/AppStream/x86_64/os/Packages/n/nano-6.2-7.el9.x86_64.rpm
 ## install vim
 https://download.rockylinux.org/pub/rocky/8/BaseOS/x86_64/os/Packages/v/vim-minimal-8.0.1763-21.el8_10.x86_64.rpm
+
+## Tomcat
+https://archive.apache.org/dist/tomcat/tomcat-10/v10.1.57/bin/apache-tomcat-10.1.57.tar.gz?utm_source=chatgpt.com
