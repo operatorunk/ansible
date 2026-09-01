@@ -14,3 +14,9 @@ https://download.rockylinux.org/pub/rocky/8/BaseOS/x86_64/os/Packages/v/vim-mini
 
 ## Tomcat
 https://archive.apache.org/dist/tomcat/tomcat-10/v10.1.57/bin/apache-tomcat-10.1.57.tar.gz
+
+## MQ windows
+https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqdev/redist/9.3.0.41-IBM-MQC-Redist-Win64.zip
+
+## MQ Linux
+https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqdev/redist/9.3.0.41-IBM-MQC-Redist-LinuxX64.tar.gz?utm_source=chatgpt.com
