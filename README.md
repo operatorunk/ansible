@@ -19,4 +19,4 @@ https://archive.apache.org/dist/tomcat/tomcat-10/v10.1.57/bin/apache-tomcat-10.1
 https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqdev/redist/9.3.0.41-IBM-MQC-Redist-Win64.zip
 
 ## MQ Linux
-https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqdev/redist/9.3.0.41-IBM-MQC-Redist-LinuxX64.tar.gz?utm_source=chatgpt.com
+https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqdev/redist/9.3.0.41-IBM-MQC-Redist-LinuxX64.tar.gz
