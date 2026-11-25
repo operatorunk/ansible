@@ -20,3 +20,7 @@ https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqdev/r
 
 ## MQ Linux
 https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqdev/redist/9.3.0.41-IBM-MQC-Redist-LinuxX64.tar.gz
+
+## Openjdk
+https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os/Packages/j/java-17-openjdk-headless-17.0.21.1.2-2.2.el9.x86_64.rpm
+https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os/Packages/j/java-17-openjdk-17.0.21.1.2-2.2.el9.x86_64.rpm
